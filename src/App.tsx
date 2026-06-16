@@ -285,9 +285,17 @@ export default function App() {
   useEffect(() => {
     let active = true;
     const checkUpdates = async () => {
-      const repo = systemConfig.githubRepo || "lai190065081/react-example";
+      let repo = systemConfig.githubRepo || "lai190065081/react-example";
+      repo = repo.trim();
+      
+      // Auto-parse full GitHub URLs if provided (e.g., https://github.com/user/repo/releases)
+      const githubUrlMatch = repo.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)/i);
+      if (githubUrlMatch && githubUrlMatch[1] && githubUrlMatch[2]) {
+        repo = `${githubUrlMatch[1]}/${githubUrlMatch[2].replace(/\.git$/, '')}`;
+      }
+      
       try {
-        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
@@ -846,9 +854,55 @@ export default function App() {
                         onChange={(e) => setSystemConfig(prev => ({ ...prev, githubRepo: e.target.value }))}
                         className="w-full text-xs px-3 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-theme-primary"
                       />
-                      <span className="text-[9px] text-theme-secondary mt-1 block leading-normal">
-                        自动向指定的 GitHub 仓库检测最新发布的 Release，并提供直连的 APK 打包文件下载。
-                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            let repo = systemConfig.githubRepo || "lai190065081/react-example";
+                            repo = repo.trim();
+                            const githubUrlMatch = repo.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)/i);
+                            if (githubUrlMatch && githubUrlMatch[1] && githubUrlMatch[2]) {
+                              repo = `${githubUrlMatch[1]}/${githubUrlMatch[2].replace(/\.git$/, '')}`;
+                            }
+                            const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { cache: 'no-store' });
+                            if (!res.ok) {
+                              if (res.status === 404) alert("检测失败：找不到对应的开源仓库，请检查输入地址是否正确！");
+                              else alert("检测失败：网络请求错误，可能是 GitHub API 限制，请稍后再试！");
+                              return;
+                            }
+                            const data = await res.json();
+                            const latestTag = data.tag_name;
+                            if (latestTag) {
+                              const currClean = CURRENT_VERSION.replace(/^v/i, "").trim();
+                              const lateClean = latestTag.replace(/^v/i, "").trim();
+                              if (currClean === lateClean) {
+                                alert(`当前版本（${CURRENT_VERSION}）已经是最新版，无需更新。`);
+                                return;
+                              }
+                              // Trigger auto effect popup by manually calling set update (same logic)
+                              let apkUrl = "";
+                              if (data.assets && Array.isArray(data.assets)) {
+                                const apkAsset = data.assets.find((asset: any) => asset.name?.toLowerCase().endsWith(".apk"));
+                                if (apkAsset) apkUrl = apkAsset.browser_download_url;
+                              }
+                              if (!apkUrl) apkUrl = data.html_url || `https://github.com/${repo}/releases/latest`;
+                              setUpdateInfo({
+                                tagName: latestTag,
+                                title: data.name || latestTag,
+                                body: data.body || "当前版本无具体的描述日志。",
+                                downloadUrl: apkUrl,
+                              });
+                            } else {
+                              alert("检测失败：该仓库暂未发布任何 Release。");
+                            }
+                          } catch (err: any) {
+                            alert("检测报错：" + err.message);
+                          }
+                        }}
+                        className="mt-2 w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3 h-3" /> 点击立即手动检测最新版本
+                      </button>
                     </div>
 
                     <div className="pt-2 flex items-center justify-between border-t border-theme/10">
