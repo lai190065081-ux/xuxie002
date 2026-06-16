@@ -71,7 +71,41 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug
 
-      # 7. 创建并发布 Release，上传 APK 产物
+      # 8. 现场动态生成一个固定的 KeyStore 并对 APK 进行完整签名
+      - name: Generate KeyStore and Sign APK
+        run: |
+          echo "Generating KeyStore file on the fly..."
+          keytool -genkey -v \
+            -keystore auto-release.jks \
+            -alias novel_alias \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass novel_secure_password_2026 \
+            -keypass novel_secure_password_2026 \
+            -dname "CN=Novel App, OU=Development, O=Self, L=Anywhere, S=Anywhere, C=CN"
+
+          echo "Locating Android SDK apksigner utility..."
+          APKSIGNER_PATH=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER_PATH" ]; then
+            echo "Error: Failed to locate apksigner inside $ANDROID_HOME!"
+            exit 1
+          fi
+          echo "Found apksigner at: $APKSIGNER_PATH"
+
+          echo "Signing the compile debug APK output..."
+          $APKSIGNER_PATH sign \
+            --ks auto-release.jks \
+            --ks-key-alias novel_alias \
+            --ks-pass pass:novel_secure_password_2026 \
+            --key-pass pass:novel_secure_password_2026 \
+            --out android/app/build/outputs/apk/debug/app-signed.apk \
+            android/app/build/outputs/apk/debug/app-debug.apk
+
+          echo "Verifying APK signature layout..."
+          $APKSIGNER_PATH verify android/app/build/outputs/apk/debug/app-signed.apk
+
+      # 9. 创建并发布 Release，上传完美签名版 APK 产物
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
         with:
@@ -80,6 +114,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
