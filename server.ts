@@ -6,7 +6,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -18,16 +17,8 @@ const PORT = 3000;
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
-// Initialize Gemini SDK safely
+// Initialize Gemini API Key safely
 const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
 
 // Helper: safe JSON parsing
 const parseSafeJson = (text: string) => {
@@ -78,30 +69,13 @@ app.post("/api/generate/continue", async (req, res) => {
       customSystemPrompt
     } = req.body;
 
-    const effectiveApiKey = customApiKey || apiKey;
+    const effectiveApiKey = (customApiKey && customApiKey.trim()) ? customApiKey.trim() : apiKey;
     if (!effectiveApiKey) {
       return res.status(500).json({ error: "API KEY 未配置。请在系统设置中设置 API Key，或联系管理员配置服务器 GEMINI_API_KEY。" });
     }
 
     const effectiveBaseUrl = customApiUrl && customApiUrl.trim() ? customApiUrl.trim() : undefined;
     const effectiveModel = customModel && customModel.trim() ? customModel.trim() : "gemini-3.5-flash";
-
-    // Setup custom AI client
-    const customAi = new GoogleGenAI({
-      apiKey: effectiveApiKey,
-      httpOptions: {
-        baseUrl: effectiveBaseUrl,
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-
-    // Set SSE headers
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
 
     const charactersStr = settings?.characters
       ?.map((c: any) => `- ${c.name} (${c.role}): 性格：${c.personality}。备注：${c.description}`)
@@ -161,51 +135,142 @@ ${lengthInstruction}
 2. 风格契合度：深度运用上述写作风格词汇、句长偏好与对话质感（如是古风则用半文半白，如是阴郁纪实则多白描细节描写）。在文中可以自然流露高频意象。
 3. 纯净内容：严禁输出任何 markdown 格式（如不需要用 # , * , - 或 \`\`\` 符号等，除非文本本身需要标点，但一定不要输出markdown标题等），只输出纯粹的小说段落文字本身！`;
 
-    let stream;
-    try {
-      stream = await withRetry("generate/continue", () => customAi.models.generateContentStream({
-        model: effectiveModel,
-        contents: prompt,
-        config: {
-          systemInstruction: customSystemPrompt && customSystemPrompt.trim() ? customSystemPrompt : undefined,
-          safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-          ],
+    const systemPrompt = customSystemPrompt && customSystemPrompt.trim()
+      ? customSystemPrompt
+      : "你是一位专心致志、文笔行云流水的小说创作助手。严禁输出任何 markdown 格式或旁白解释，只输出小说正文段落。";
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt }
+    ];
+
+    // Determine target OpenAI Url
+    let baseUrl = effectiveBaseUrl ? effectiveBaseUrl.trim() : "https://generativelanguage.googleapis.com/v1beta/openai";
+    if (baseUrl.endsWith("/")) {
+      baseUrl = baseUrl.slice(0, -1);
+    }
+    
+    let requestUrl = "";
+    if (baseUrl.includes("/chat/completions")) {
+      requestUrl = baseUrl;
+    } else if (baseUrl === "https://generativelanguage.googleapis.com/v1beta/openai") {
+      requestUrl = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions";
+    } else if (baseUrl.endsWith("/v1") || baseUrl.endsWith("/v1/")) {
+      requestUrl = `${baseUrl}/chat/completions`;
+    } else {
+      requestUrl = `${baseUrl}/v1/chat/completions`;
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${effectiveApiKey}`,
+    };
+
+    const performStreamRequest = async () => {
+      const apiResponse = await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: effectiveModel,
+          messages,
           temperature: 0.85,
-          topP: 0.95,
-        }
-      }));
+          stream: true,
+        }),
+      });
+
+      if (!apiResponse.ok) {
+        const errorText = await apiResponse.text();
+        throw new Error(`OpenAI-compatible Endpoint Error (${apiResponse.status}): ${errorText}`);
+      }
+      return apiResponse;
+    };
+
+    let apiResponse;
+    try {
+      apiResponse = await withRetry("generate/continue", performStreamRequest);
     } catch (err: any) {
-      const isUnavailable = err?.status === 503 || err?.status === 429 || err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("demand");
-      const fallbackModel = "gemini-3.5-flash";
-      if (isUnavailable && effectiveModel !== fallbackModel) {
-        console.warn(`[generate/continue] Primary model ${effectiveModel} failed. Falling back automatically to ${fallbackModel}...`);
-        stream = await withRetry("generate/continue (fallback)", () => customAi.models.generateContentStream({
-          model: fallbackModel,
-          contents: prompt,
-          config: {
-            systemInstruction: customSystemPrompt && customSystemPrompt.trim() ? customSystemPrompt : undefined,
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-            ],
+      // Automatic stability fallback to Gemini 3.5 if custom fails on default baseUrl
+      if (!effectiveBaseUrl && effectiveModel !== "gemini-3.5-flash") {
+        console.warn(`[generate/continue] Model ${effectiveModel} failed, auto falling back to gemini-3.5-flash...`);
+        const fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions";
+        apiResponse = await withRetry("generate/continue (fallback)", () => fetch(fallbackUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: "gemini-3.5-flash",
+            messages,
             temperature: 0.85,
-            topP: 0.95,
-          }
+            stream: true,
+          }),
         }));
       } else {
         throw err;
       }
     }
 
-    for await (const chunk of stream) {
-      if (chunk.text) {
-        res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const reader = apiResponse.body?.getReader();
+    if (!reader) {
+      throw new Error("服务端响应主体无法实现数据流模式转换");
+    }
+
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let finished = false;
+
+    while (!finished) {
+      const { value, done } = await reader.read();
+      if (done) {
+        finished = true;
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (!cleaned) continue;
+
+        if (cleaned.startsWith("data:")) {
+          const dataStr = cleaned.slice(5).trim();
+          if (dataStr === "[DONE]") {
+            res.write("data: [DONE]\n\n");
+          } else {
+            try {
+              const parsed = JSON.parse(dataStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
+              }
+            } catch (e: any) {
+              // Ignore partial chunk syntax errors or other exceptions
+            }
+          }
+        }
+      }
+    }
+
+    // Process leftover buffer
+    if (buffer.trim()) {
+      const cleaned = buffer.trim();
+      if (cleaned.startsWith("data:")) {
+        const dataStr = cleaned.slice(5).trim();
+        if (dataStr !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(dataStr);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
+            }
+          } catch (e) {}
+        }
       }
     }
 
@@ -237,24 +302,13 @@ app.post("/api/generate/rewrite", async (req, res) => {
       return res.status(400).json({ error: "选中的文本为空" });
     }
 
-    const effectiveApiKey = customApiKey || apiKey;
+    const effectiveApiKey = (customApiKey && customApiKey.trim()) ? customApiKey.trim() : apiKey;
     if (!effectiveApiKey) {
       return res.status(500).json({ error: "API KEY 未配置。请在系统设置中设置 API Key，或联系管理员配置服务器 GEMINI_API_KEY。" });
     }
 
     const effectiveBaseUrl = customApiUrl && customApiUrl.trim() ? customApiUrl.trim() : undefined;
     const effectiveModel = customModel && customModel.trim() ? customModel.trim() : "gemini-3.5-flash";
-
-    // Setup custom AI client
-    const customAi = new GoogleGenAI({
-      apiKey: effectiveApiKey,
-      httpOptions: {
-        baseUrl: effectiveBaseUrl,
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
 
     const charactersStr = settings?.characters
       ?.map((c: any) => `- ${c.name}: ${c.personality}`)
@@ -287,49 +341,82 @@ ${selectedText}
 2. 必须保留这段文本基本的情节骨架和物理实体，但根据指令修改其情感、描写厚度、对话腔调、文字画卷度、张力或结构。
 3. 请直接输出改写润色后的**小说正文纯文本**。不要包含任何“修改前”、“修改后”或“收到，以下是修改”之类的附言。`;
 
-    let response;
-    try {
-      response = await withRetry("generate/rewrite", () => customAi.models.generateContent({
-        model: effectiveModel,
-        contents: prompt,
-        config: {
-          systemInstruction: customSystemPrompt && customSystemPrompt.trim() ? customSystemPrompt : undefined,
-          safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-          ],
+    const systemPrompt = customSystemPrompt && customSystemPrompt.trim()
+      ? customSystemPrompt
+      : "您是一位精雕细琢的小说润色与改写大师，请直接输出修改后的小说正文纯文本。不要解释或包含多余格式。";
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt }
+    ];
+
+    // Determine target OpenAI Url
+    let baseUrl = effectiveBaseUrl ? effectiveBaseUrl.trim() : "https://generativelanguage.googleapis.com/v1beta/openai";
+    if (baseUrl.endsWith("/")) {
+      baseUrl = baseUrl.slice(0, -1);
+    }
+    
+    let requestUrl = "";
+    if (baseUrl.includes("/chat/completions")) {
+      requestUrl = baseUrl;
+    } else if (baseUrl === "https://generativelanguage.googleapis.com/v1beta/openai") {
+      requestUrl = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions";
+    } else if (baseUrl.endsWith("/v1") || baseUrl.endsWith("/v1/")) {
+      requestUrl = `${baseUrl}/chat/completions`;
+    } else {
+      requestUrl = `${baseUrl}/v1/chat/completions`;
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${effectiveApiKey}`,
+    };
+
+    const performRequest = async () => {
+      const apiResponse = await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: effectiveModel,
+          messages,
           temperature: 0.75,
-        }
-      }));
+        }),
+      });
+
+      if (!apiResponse.ok) {
+        const errorText = await apiResponse.text();
+        throw new Error(`OpenAI-compatible Endpoint Error (${apiResponse.status}): ${errorText}`);
+      }
+      return apiResponse;
+    };
+
+    let apiResponse;
+    try {
+      apiResponse = await withRetry("generate/rewrite", performRequest);
     } catch (err: any) {
-      const isUnavailable = err?.status === 503 || err?.status === 429 || err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("demand");
-      const fallbackModel = "gemini-3.5-flash";
-      if (isUnavailable && effectiveModel !== fallbackModel) {
-        console.warn(`[generate/rewrite] Primary model ${effectiveModel} failed. Falling back automatically to ${fallbackModel}...`);
-        response = await withRetry("generate/rewrite (fallback)", () => customAi.models.generateContent({
-          model: fallbackModel,
-          contents: prompt,
-          config: {
-            systemInstruction: customSystemPrompt && customSystemPrompt.trim() ? customSystemPrompt : undefined,
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-            ],
+      if (!effectiveBaseUrl && effectiveModel !== "gemini-3.5-flash") {
+        console.warn(`[generate/rewrite] Model ${effectiveModel} failed, auto falling back to gemini-3.5-flash...`);
+        const fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions";
+        apiResponse = await withRetry("generate/rewrite (fallback)", () => fetch(fallbackUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: "gemini-3.5-flash",
+            messages,
             temperature: 0.75,
-          }
+          }),
         }));
       } else {
         throw err;
       }
     }
 
+    const data = await apiResponse.json() as any;
+    const content = data.choices?.[0]?.message?.content || "";
+
     return res.json({
       success: true,
-      rewrittenText: response.text || ""
+      rewrittenText: content.trim()
     });
   } catch (error: any) {
     console.error("Rewrite error:", error);

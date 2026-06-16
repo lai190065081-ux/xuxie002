@@ -151,6 +151,7 @@ export default function App() {
   });
 
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isImmersive, setIsImmersive] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     tagName: string;
     title: string;
@@ -444,30 +445,32 @@ export default function App() {
     <div className={`fixed inset-0 flex flex-col select-none overflow-hidden font-sans bg-theme-app text-theme-primary ${isDark ? "theme-dark" : "theme-parchment"}`}>
       
       {/* Dynamic header row of the app */}
-      <header className="bg-theme-header border-b border-theme/20 py-3 px-4 flex items-center justify-between shrink-0" id="app_brand_statusbar" style={{ borderColor: "#888a8e" }}>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white">
-            <PenTool className="w-4.5 h-4.5" />
+      {!isImmersive && (
+        <header className="bg-theme-header border-b border-theme/20 py-3 px-4 flex items-center justify-between shrink-0" id="app_brand_statusbar" style={{ borderColor: "#888a8e" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white">
+              <PenTool className="w-4.5 h-4.5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-black text-theme-primary tracking-tight flex items-center gap-1 leading-none">
+                小墨续笔 
+                <span className="text-[9px] bg-amber-500/10 text-amber-600 font-bold px-1.5 py-0.5 rounded border border-amber-500/20 leading-none">
+                  智笔版
+                </span>
+              </h2>
+              <p className="text-[10px] text-theme-secondary font-medium mt-0.5 truncate max-w-[180px]">
+                {mainTab === "write" ? `《${settings.title || "自定义书目"}》` : mainTab === "library" ? "书库本卷" : "系统设定本卷"}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-black text-theme-primary tracking-tight flex items-center gap-1 leading-none">
-              小墨续笔 
-              <span className="text-[9px] bg-amber-500/10 text-amber-600 font-bold px-1.5 py-0.5 rounded border border-amber-500/20 leading-none">
-                智笔版
-              </span>
-            </h2>
-            <p className="text-[10px] text-theme-secondary font-medium mt-0.5 truncate max-w-[180px]">
-              {mainTab === "write" ? `《${settings.title || "自定义书目"}》` : mainTab === "library" ? "书库本卷" : "系统设定本卷"}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-500/10 px-2 py-1 rounded font-mono font-bold border border-amber-500/20">
-            <span>{systemConfig.apiModel || "gemini-3.5-flash"}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-500/10 px-2 py-1 rounded font-mono font-bold border border-amber-500/20">
+              <span>{systemConfig.apiModel || "gemini-3.5-flash"}</span>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 flex flex-col relative bg-theme-app" id="mobile_content_container">
@@ -482,32 +485,34 @@ export default function App() {
               className="w-full h-full flex flex-col min-h-0"
             >
               {/* Embedded Sleek Segmented Sub-tabs for Current Creation */}
-              <div className="px-4 pt-4 pb-2.5 bg-theme-header border-b border-theme/20 flex items-center justify-center shrink-0" style={{ borderColor: "#888a8e" }}>
-                <div className="flex bg-theme-app p-0.5 rounded-lg w-full max-w-xs border border-theme/25" style={{ borderColor: "#888a8e" }}>
-                  <button
-                    onClick={() => setActiveTab("editor")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                      activeTab === "editor"
-                        ? "bg-theme-card text-theme-primary shadow-sm"
-                        : "text-theme-secondary hover:text-theme-primary"
-                    }`}
-                  >
-                    <PenTool className={`w-3.5 h-3.5 ${activeTab === "editor" ? "text-amber-600" : "text-theme-muted"}`} />
-                    正文创作
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("settings")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                      activeTab === "settings"
-                        ? "bg-theme-card text-theme-primary shadow-sm"
-                        : "text-theme-secondary hover:text-theme-primary"
-                    }`}
-                  >
-                    <BookOpen className={`w-3.5 h-3.5 ${activeTab === "settings" ? "text-amber-600" : "text-theme-muted"}`} />
-                    人设与世界观
-                  </button>
+              {!isImmersive && (
+                <div className="px-4 pt-4 pb-2.5 bg-theme-header border-b border-theme/20 flex items-center justify-center shrink-0" style={{ borderColor: "#888a8e" }}>
+                  <div className="flex bg-theme-app p-0.5 rounded-lg w-full max-w-xs border border-theme/25" style={{ borderColor: "#888a8e" }}>
+                    <button
+                      onClick={() => setActiveTab("editor")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        activeTab === "editor"
+                          ? "bg-theme-card text-theme-primary shadow-sm"
+                          : "text-theme-secondary hover:text-theme-primary"
+                      }`}
+                    >
+                      <PenTool className={`w-3.5 h-3.5 ${activeTab === "editor" ? "text-amber-600" : "text-theme-muted"}`} />
+                      正文创作
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("settings")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        activeTab === "settings"
+                          ? "bg-theme-card text-theme-primary shadow-sm"
+                          : "text-theme-secondary hover:text-theme-primary"
+                      }`}
+                    >
+                      <BookOpen className={`w-3.5 h-3.5 ${activeTab === "settings" ? "text-amber-600" : "text-theme-muted"}`} />
+                      人设与世界观
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Sub Tab View rendering */}
               <div className="flex-1 min-h-0 flex flex-col relative">
@@ -521,7 +526,7 @@ export default function App() {
                     className="w-full h-full flex flex-col min-h-0"
                   >
                     {activeTab === "editor" ? (
-                      <div className="flex-1 min-h-0 flex flex-col pb-14">
+                      <div className={`flex-1 min-h-0 flex flex-col ${isImmersive ? "pb-0" : "pb-14"}`}>
                         <NovelEditor
                           chapters={chapters}
                           activeChapterId={activeChapterId}
@@ -531,6 +536,8 @@ export default function App() {
                           isStreaming={isStreaming}
                           onGenerateContinue={(targetPlot, generateLength) => handleApplyContinuationStream(targetPlot, generateLength, activeChapter.content.trim().length === 0)}
                           systemConfig={systemConfig}
+                          isImmersive={isImmersive}
+                          setIsImmersive={setIsImmersive}
                         />
                       </div>
                     ) : (
@@ -688,8 +695,8 @@ export default function App() {
                         onChange={(e) => setSystemConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                         className="w-full text-xs px-3 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-theme-primary"
                       />
-                      <span className="text-[9px] text-theme-secondary mt-1 block">
-                        可配置反向代理地址或第三方中转节点，如：https://api.openai.com
+                      <span className="text-[9px] text-theme-secondary mt-1 block leading-relaxed">
+                        兼容标准 OpenAI 格式。例如 DeepSeek 使用 <code className="bg-amber-500/10 px-1 text-amber-800">https://api.deepseek.com/v1</code> ；硅基流动使用 <code className="bg-amber-500/10 px-1 text-amber-800">https://api.siliconflow.cn/v1</code> ；留空则默认使用保底的官方网关。
                       </span>
                     </div>
 
@@ -700,7 +707,7 @@ export default function App() {
                       <div className="relative flex items-center">
                         <input
                           type={showApiKey ? "text" : "password"}
-                          placeholder="请输入 Gemini API Key"
+                          placeholder="请输入 API Key (如 sk-... 或官方 Gemini Key)"
                           value={systemConfig.apiKey}
                           onChange={(e) => setSystemConfig(prev => ({ ...prev, apiKey: e.target.value }))}
                           className="w-full text-xs pl-3 pr-10 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-theme-primary"
@@ -724,7 +731,7 @@ export default function App() {
                       </label>
                       <div className="space-y-2">
                         <select
-                          value={["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"].includes(systemConfig.apiModel) ? systemConfig.apiModel : "custom"}
+                          value={["gemini-3.5-flash", "gemini-2.5-flash", "deepseek-v4-flash"].includes(systemConfig.apiModel) ? systemConfig.apiModel : "custom"}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "custom") {
@@ -735,16 +742,16 @@ export default function App() {
                           }}
                           className="w-full text-xs px-3 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 text-theme-primary cursor-pointer"
                         >
-                          <option value="gemini-3.5-flash">gemini-3.5-flash (推荐，超低延迟与更高稳定性)</option>
+                          <option value="gemini-3.5-flash">gemini-3.5-flash (推荐，超级稳定的保底 Gemini 模型)</option>
                           <option value="gemini-2.5-flash">gemini-2.5-flash (经典极速流畅创作)</option>
-                          <option value="gemini-2.5-pro">gemini-2.5-pro (适合复杂推理与长篇对话)</option>
+                          <option value="deepseek-v4-flash">deepseek-v4-flash (DeepSeek 极速最新大模型)</option>
                           <option value="custom">✍️ 手动输入自定义模型名称...</option>
                         </select>
 
-                        {!["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"].includes(systemConfig.apiModel) && (
+                        {!["gemini-3.5-flash", "gemini-2.5-flash", "deepseek-v4-flash"].includes(systemConfig.apiModel) && (
                           <input
                             type="text"
-                            placeholder="请输入自定义模型名称，例如：gemini-2.5-flash-exp"
+                            placeholder="请输入自定义模型名称，例如：deepseek-ai/DeepSeek-V3 或 ep-202506..."
                             value={systemConfig.apiModel}
                             onChange={(e) => setSystemConfig(prev => ({ ...prev, apiModel: e.target.value }))}
                             className="w-full text-xs px-3 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-theme-primary"
@@ -861,95 +868,97 @@ export default function App() {
       </div>
 
       {/* Bottom Persistent Touch navigation Dock (Compact height & padding matching requests) */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 bg-theme-nav border-t border-theme/20 px-4 pt-1.5 pb-1 flex justify-between items-center shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-40"
-        id="bottom_floating_tabs"
-        style={{ borderColor: "#888a8e" }}
-      >
-        <button
-          onClick={() => setMainTab("library")}
-          className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
-          id="tab_click_library"
+      {!isImmersive && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 bg-theme-nav border-t border-theme/20 px-4 pt-1.5 pb-1 flex justify-between items-center shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-40"
+          id="bottom_floating_tabs"
+          style={{ borderColor: "#888a8e" }}
         >
-          {mainTab === "library" && (
-            <motion.div
-              layoutId="active_main_tab_highlight"
-              className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
-              transition={{ type: "spring", stiffness: 350, damping: 25 }}
-            />
-          )}
-          
-          <Library
-            className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
-              mainTab === "library" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
-            }`}
-          />
-          
-          <span
-            className={`text-[10px] font-bold tracking-tight transition-colors ${
-              mainTab === "library" ? "text-amber-600" : "text-theme-muted/65"
-            }`}
+          <button
+            onClick={() => setMainTab("library")}
+            className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
+            id="tab_click_library"
           >
-            小说书库
-          </span>
-        </button>
+            {mainTab === "library" && (
+              <motion.div
+                layoutId="active_main_tab_highlight"
+                className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              />
+            )}
+            
+            <Library
+              className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
+                mainTab === "library" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
+              }`}
+            />
+            
+            <span
+              className={`text-[10px] font-bold tracking-tight transition-colors ${
+                mainTab === "library" ? "text-amber-600" : "text-theme-muted/65"
+              }`}
+            >
+              小说书库
+            </span>
+          </button>
 
-        <button
-          onClick={() => setMainTab("write")}
-          className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
-          id="tab_click_write"
-        >
-          {mainTab === "write" && (
-            <motion.div
-              layoutId="active_main_tab_highlight"
-              className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
-              transition={{ type: "spring", stiffness: 350, damping: 25 }}
-            />
-          )}
-          
-          <PenTool
-            className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
-              mainTab === "write" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
-            }`}
-          />
-          
-          <span
-            className={`text-[10px] font-bold tracking-tight transition-colors ${
-              mainTab === "write" ? "text-amber-600" : "text-theme-muted/65"
-            }`}
+          <button
+            onClick={() => setMainTab("write")}
+            className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
+            id="tab_click_write"
           >
-            当前创作
-          </span>
-        </button>
+            {mainTab === "write" && (
+              <motion.div
+                layoutId="active_main_tab_highlight"
+                className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              />
+            )}
+            
+            <PenTool
+              className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
+                mainTab === "write" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
+              }`}
+            />
+            
+            <span
+              className={`text-[10px] font-bold tracking-tight transition-colors ${
+                mainTab === "write" ? "text-amber-600" : "text-theme-muted/65"
+              }`}
+            >
+              当前创作
+            </span>
+          </button>
 
-        <button
-          onClick={() => setMainTab("system")}
-          className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
-          id="tab_click_system"
-        >
-          {mainTab === "system" && (
-            <motion.div
-              layoutId="active_main_tab_highlight"
-              className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
-              transition={{ type: "spring", stiffness: 350, damping: 25 }}
-            />
-          )}
-          
-          <SettingsIcon
-            className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
-              mainTab === "system" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
-            }`}
-          />
-          
-          <span
-            className={`text-[10px] font-bold tracking-tight transition-colors ${
-              mainTab === "system" ? "text-amber-600" : "text-theme-muted/65"
-            }`}
+          <button
+            onClick={() => setMainTab("system")}
+            className="flex flex-col items-center gap-0.5 flex-1 relative py-0.5 cursor-pointer outline-none"
+            id="tab_click_system"
           >
-            系统设置
-          </span>
-        </button>
-      </nav>
+            {mainTab === "system" && (
+              <motion.div
+                layoutId="active_main_tab_highlight"
+                className="absolute -top-1.5 w-8 h-0.5 bg-amber-600 rounded-full"
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              />
+            )}
+            
+            <SettingsIcon
+              className={`w-4 h-4 transition-transform active:scale-90 duration-150 ${
+                mainTab === "system" ? "text-amber-600 scale-105" : "text-theme-muted/50 hover:text-theme-secondary"
+              }`}
+            />
+            
+            <span
+              className={`text-[10px] font-bold tracking-tight transition-colors ${
+                mainTab === "system" ? "text-amber-600" : "text-theme-muted/65"
+              }`}
+            >
+              系统设置
+            </span>
+          </button>
+        </nav>
+      )}
 
       {/* GitHub Releases New Version Update Modal Backdrop & Card */}
       <AnimatePresence>

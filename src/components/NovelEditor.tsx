@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
-import { Download, Plus, Trash2, FileText, ChevronDown, Check, X, RefreshCw, Sparkles, BookOpen, ChevronRight } from "lucide-react";
+import { Download, Plus, Trash2, FileText, ChevronDown, Check, X, RefreshCw, Sparkles, BookOpen, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { Chapter, NovelSettings, SystemConfig } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -17,6 +17,8 @@ interface NovelEditorProps {
   isStreaming: boolean;
   onGenerateContinue: (targetPlot: string, generateLength: string) => void;
   systemConfig?: SystemConfig;
+  isImmersive?: boolean;
+  setIsImmersive?: (val: boolean) => void;
 }
 
 export default function NovelEditor({
@@ -28,6 +30,8 @@ export default function NovelEditor({
   isStreaming,
   onGenerateContinue,
   systemConfig,
+  isImmersive = false,
+  setIsImmersive,
 }: NovelEditorProps) {
   const [selectedText, setSelectedText] = useState("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
@@ -37,7 +41,7 @@ export default function NovelEditor({
   const [newChapterTitle, setNewChapterTitle] = useState("");
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0];
@@ -72,7 +76,7 @@ export default function NovelEditor({
     };
   }, []);
 
-  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
@@ -243,6 +247,20 @@ export default function NovelEditor({
     setRewriteInstruction("");
   };
 
+  const handleWorkspaceClick = (e: React.MouseEvent) => {
+    if (isImmersive && setIsImmersive) {
+      setIsImmersive(false);
+      return;
+    }
+
+    // Capture simple clicks to enter immersion mode, ignoring interactive widgets
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest("button") || target.closest("textarea") || target.closest("input") || target.closest("select") || target.closest("#mobile_precision_drawer") || target.closest("#chapters_drawer_sheet");
+    if (!isInteractive && setIsImmersive) {
+      setIsImmersive(true);
+    }
+  };
+
   const handleExportTxt = () => {
     if (!activeChapter) return;
     const bookTitle = settings.title || "小说续写成果";
@@ -259,142 +277,244 @@ export default function NovelEditor({
   };
 
   return (
-    <div className="flex flex-col h-full bg-theme-app text-theme-primary" id="mobile_editor_workspace" style={{ borderColor: "#888a8e" }}>
-      
-      {/* Dynamic Header with dropdown styled for Mobile */}
-      <div className="bg-theme-header border-b border-theme/30 px-4 py-3 flex items-center justify-between" style={{ borderColor: "#888a8e" }}>
-        <button
-          onClick={() => setIsChapterDrawerOpen(true)}
-          className="flex items-center gap-1 bg-amber-500/10 active:bg-amber-500/20 text-amber-900 px-3 py-1.5 rounded-full text-xs font-bold transition border border-amber-500/20"
-          id="btn_trigger_chapters_drawer"
-        >
-          <FileText className="w-3.5 h-3.5 text-amber-700" />
-          <span className="truncate max-w-[130px]">{activeChapter ? activeChapter.title : "无章节"}</span>
-          <ChevronDown className="w-3.5 h-3.5 text-amber-700" />
-        </button>
+    <div 
+      className={
+        isImmersive
+          ? "fixed inset-0 z-[60] h-screen w-screen overflow-y-auto bg-theme-app text-theme-primary cursor-pointer selection:bg-amber-500/20"
+          : "flex flex-col h-full bg-theme-app text-theme-primary relative cursor-pointer"
+      }
+      id="mobile_editor_workspace" 
+      style={{ borderColor: "#888a8e" }}
+      onClick={handleWorkspaceClick}
+      onScroll={isImmersive ? handleScroll : undefined}
+      ref={isImmersive ? textareaRef : undefined}
+    >
+      {isImmersive ? (
+        <div className="relative min-h-screen py-16 flex flex-col" onClick={(e) => e.stopPropagation()}>
+          {/* Immersive Float Header details with absolute alignment */}
+          <div className="absolute top-4 left-6 right-6 flex items-center justify-between select-none z-30 max-w-3xl md:mx-auto">
+            <span className="text-[10px] text-theme-secondary italic opacity-85">
+              ✨ 沉浸写作模式 (双击正文或点击空白处退出)...
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsImmersive?.(false);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-500/20 text-[10px] font-bold flex items-center gap-1 transition shadow-xs cursor-pointer z-40"
+            >
+              <Minimize2 className="w-3 h-3 text-amber-700" />
+              退出沉浸
+            </button>
+          </div>
 
-        {/* Info or Edit Title directly */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] bg-amber-150/45 text-amber-800 font-mono px-3 py-1 rounded-full border border-amber-500/10">
-            {activeChapter ? activeChapter.wordCount : 0} 字
-          </span>
-          <button
-            onClick={handleExportTxt}
-            disabled={!activeChapter || !activeChapter.content}
-            className={`p-1.5 rounded-lg bg-theme-input-pure active:bg-theme-active border border-theme/35 transition flex items-center justify-center shrink-0 ${
-              !activeChapter || !activeChapter.content ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:border-amber-500/50"
-            }`}
-            title="导出TXT"
+          {/* Immersive Reader Body: protected inside a centered layout with comfortable margin */}
+          <article
+            onDoubleClick={() => setIsImmersive?.(false)}
+            className="w-full max-w-3xl mx-auto px-6 md:px-8 text-[15px] md:text-base leading-loose select-text outline-none text-theme-primary mt-1"
+            style={{ fontFamily: "'Inter', sans-serif" }}
           >
-            <Download className="w-3.5 h-3.5 text-theme-secondary" />
-          </button>
+            {activeChapter && activeChapter.content?.trim() ? (
+              <div className="space-y-5 pr-1 selection:bg-amber-600/15">
+                {activeChapter.content
+                  .split("\n")
+                  .map(p => p.trim())
+                  .filter(p => p.length > 0)
+                  .map((para, idx) => (
+                    <p 
+                      key={idx} 
+                      className="text-theme-primary tracking-wide text-justify leading-loose"
+                      style={{ textIndent: "2em" }}
+                    >
+                      {para}
+                    </p>
+                  ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-center text-xs text-theme-secondary/70">
+                <BookOpen className="w-8 h-8 text-amber-600/40 mb-2.5" />
+                <span>
+                  当前章节尚无文本段落。请在下方输入您的命题，手书契引 AI 一键撰砚。
+                </span>
+              </div>
+            )}
+          </article>
+
+          {isStreaming && (
+            <div className="fixed bottom-16 left-4 right-4 pointer-events-none z-30">
+              <div className="bg-amber-600/95 text-white px-4 py-2 rounded-full text-[11px] font-bold shadow-md flex items-center justify-center gap-2 animate-bounce mx-auto max-w-xs">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                正在将墨笔意象续接到最末一行...
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Dynamic Header with dropdown styled for Mobile */}
+          <div className="bg-theme-header border-b border-theme/30 px-4 py-3 flex items-center justify-between" style={{ borderColor: "#888a8e" }}>
+            <button
+              onClick={() => setIsChapterDrawerOpen(true)}
+              className="flex items-center gap-1 bg-amber-500/10 active:bg-amber-500/20 text-amber-900 px-3 py-1.5 rounded-full text-xs font-bold transition border border-amber-500/20"
+              id="btn_trigger_chapters_drawer"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-700" />
+              <span className="truncate max-w-[130px]">{activeChapter ? activeChapter.title : "无章节"}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-amber-700" />
+            </button>
 
-      {/* Parchment styled Editing Canvas */}
-      <div className="flex-1 flex flex-col relative min-h-0">
-        <textarea
-          ref={textareaRef}
-          value={activeChapter ? activeChapter.content : ""}
-          onChange={handleTextChange}
-          onSelect={handleSelectText}
-          onScroll={handleScroll}
-          placeholder={
-            isStreaming
-              ? "小墨正在斟酌局势字词，流式倾吐续写内容中..."
-              : "在此写下前文，点击“AI续写”或者在下面输入提示词后点击续写。\n\n💡 提示：按住划选任何语句可以进行“AI局部微雕润色”。"
-          }
-          className="flex-1 w-full p-4 text-sm text-gray-850 font-normal leading-relaxed focus:outline-none bg-transparent resize-none font-sans"
-          disabled={isStreaming}
-          id="mobile_novel_editor_textarea"
-          style={{ fontFamily: "'Inter', sans-serif" }}
-        />
-
-        {isStreaming && (
-          <div className="absolute bottom-16 left-4 right-4 pointer-events-none">
-            <div className="bg-amber-600/95 text-white px-4 py-2 rounded-full text-[11px] font-bold shadow-md flex items-center justify-center gap-2 animate-bounce mx-auto max-w-xs">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              正在将墨笔意象续接到最末一行...
+            {/* Info or Edit Title directly */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-amber-150/45 text-amber-800 font-mono px-3 py-1 rounded-full border border-amber-500/10">
+                {activeChapter ? activeChapter.wordCount : 0} 字
+              </span>
+              <button
+                onClick={() => setIsImmersive?.(true)}
+                className="p-1.5 rounded-lg bg-theme-input-pure active:bg-theme-active border border-theme/35 transition flex items-center justify-center shrink-0 cursor-pointer hover:border-amber-500/50"
+                title="一键开启沉浸专注"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-theme-secondary" />
+              </button>
+              <button
+                onClick={handleExportTxt}
+                disabled={!activeChapter || !activeChapter.content}
+                className={`p-1.5 rounded-lg bg-theme-input-pure active:bg-theme-active border border-theme/35 transition flex items-center justify-center shrink-0 ${
+                  !activeChapter || !activeChapter.content ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:border-amber-500/50"
+                }`}
+                title="导出TXT"
+              >
+                <Download className="w-3.5 h-3.5 text-theme-secondary" />
+              </button>
             </div>
           </div>
-        )}
-        
-        {/* Simple generation input bar */}
-        <div
-          className="bg-theme-card border-t border-theme/20 p-3 flex items-center gap-2 shrink-0"
-          style={{
-            height: '57px',
-            borderWidth: '1px',
-            paddingLeft: '6px',
-            paddingRight: '10px',
-            paddingTop: '12px',
-            paddingBottom: '12px',
-            marginTop: '0px',
-            marginBottom: '-9px',
-            borderRadius: '0px',
-            borderStyle: 'inset',
-            borderColor: '#888a8e',
-          }}
-        >
-          <input
-            type="text"
-            placeholder="后续怎么写？(留空自由发挥)"
-            className="flex-1 text-xs px-3 py-2.5 border border-theme/20 bg-theme-input-pure text-theme-primary rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans shadow-sm"
-            style={{ borderColor: "#888a8e" }}
-            id="input_target_plot"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const targetPlot = (document.getElementById('input_target_plot') as HTMLInputElement).value;
-                const generateLengthInput = document.getElementById('input_generate_length') as HTMLInputElement;
-                let val = parseInt(generateLengthInput.value, 10);
-                if (isNaN(val) || val < 50) val = 50;
-                if (val > 2000) val = 2000;
-                onGenerateContinue(targetPlot, val.toString());
-              }
-            }}
-          />
+
+          {/* Parchment styled Editing Canvas */}
           <div 
-            className="w-20 flex items-center gap-0.5 justify-center shrink-0 bg-theme-input-pure border border-theme/20 rounded-xl px-1 shadow-sm focus-within:ring-1 focus-within:ring-amber-500"
-            style={{ borderColor: "#888a8e" }}
+            className="flex-1 flex flex-col relative min-h-0"
+            onClick={(e) => e.stopPropagation()}
           >
-            <input 
-              type="number"
-              id="input_generate_length" 
-              className="text-xs py-2.5 focus:outline-none bg-transparent w-10 outline-none font-bold text-theme-primary text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              defaultValue="300"
-              min="50"
-              max="2000"
-              placeholder="300"
-              onBlur={(e) => {
-                let val = parseInt(e.target.value, 10);
-                if (isNaN(val) || val < 50) {
-                  e.target.value = "50";
-                } else if (val > 2000) {
-                  e.target.value = "2000";
-                }
+            <article
+              ref={textareaRef}
+              onScroll={handleScroll}
+              className="flex-1 w-full p-6 text-[15px] md:text-base leading-loose overflow-y-auto bg-transparent select-text outline-none text-theme-primary focus:ring-0 focus:outline-none selection:bg-amber-500/20"
+              id="mobile_novel_editor_reader"
+              style={{ fontFamily: "'Inter', sans-serif", outline: "none" }}
+            >
+              {activeChapter && activeChapter.content?.trim() ? (
+                <div className="space-y-5 pr-1 selection:bg-amber-600/15 max-w-3xl mx-auto">
+                  {activeChapter.content
+                    .split("\n")
+                    .map(p => p.trim())
+                    .filter(p => p.length > 0)
+                    .map((para, idx) => (
+                      <p 
+                        key={idx} 
+                        className="text-theme-primary tracking-wide text-justify leading-loose"
+                        style={{ textIndent: "2em" }}
+                      >
+                        {para}
+                      </p>
+                    ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-center text-xs text-theme-secondary/70">
+                  <BookOpen className="w-8 h-8 text-amber-600/40 mb-2.5" />
+                  <span>
+                    {isStreaming
+                      ? "小墨正在斟酌局势字词，流式倾吐续写内容中..."
+                      : "当前章节尚无文本段落。请在下方输入您的命题，手书契引 AI 一键撰砚。"}
+                  </span>
+                </div>
+              )}
+            </article>
+
+            {isStreaming && (
+              <div className="absolute bottom-16 left-4 right-4 pointer-events-none">
+                <div className="bg-amber-600/95 text-white px-4 py-2 rounded-full text-[11px] font-bold shadow-md flex items-center justify-center gap-2 animate-bounce mx-auto max-w-xs">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  正在将墨笔意象续接到最末一行...
+                </div>
+              </div>
+            )}
+            
+            {/* Simple generation input bar */}
+            <div
+              className="bg-theme-card border-t border-theme/20 p-3 flex items-center gap-2 shrink-0"
+              style={{
+                height: '57px',
+                borderWidth: '1px',
+                paddingLeft: '6px',
+                paddingRight: '10px',
+                paddingTop: '12px',
+                paddingBottom: '12px',
+                marginTop: '0px',
+                marginBottom: '-9px',
+                borderRadius: '0px',
+                borderStyle: 'inset',
+                borderColor: '#888a8e',
               }}
-            />
-            <span className="text-xs text-theme-secondary font-bold shrink-0">字</span>
+            >
+              <input
+                type="text"
+                placeholder="后续怎么写？(留空自由发挥)"
+                className="flex-1 text-xs px-3 py-2.5 border border-theme/20 bg-theme-input-pure text-theme-primary rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans shadow-sm"
+                style={{ borderColor: "#888a8e" }}
+                id="input_target_plot"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const targetPlot = (document.getElementById('input_target_plot') as HTMLInputElement).value;
+                    const generateLengthInput = document.getElementById('input_generate_length') as HTMLInputElement;
+                    let val = parseInt(generateLengthInput.value, 10);
+                    if (isNaN(val) || val < 50) val = 50;
+                    if (val > 2000) val = 2000;
+                    onGenerateContinue(targetPlot, val.toString());
+                  }
+                }}
+              />
+              <div 
+                className="w-20 flex items-center gap-0.5 justify-center shrink-0 bg-theme-input-pure border border-theme/20 rounded-xl px-1 shadow-sm focus-within:ring-1 focus-within:ring-amber-500"
+                style={{ borderColor: "#888a8e" }}
+              >
+                <input 
+                  type="number"
+                  id="input_generate_length" 
+                  className="text-xs py-2.5 focus:outline-none bg-transparent w-10 outline-none font-bold text-theme-primary text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  defaultValue="300"
+                  min="50"
+                  max="2000"
+                  placeholder="300"
+                  onBlur={(e) => {
+                    let val = parseInt(e.target.value, 10);
+                    if (isNaN(val) || val < 50) {
+                      e.target.value = "50";
+                    } else if (val > 2000) {
+                      e.target.value = "2000";
+                    }
+                  }}
+                />
+                <span className="text-xs text-theme-secondary font-bold shrink-0">字</span>
+              </div>
+              <button
+                onClick={() => {
+                  const targetPlot = (document.getElementById('input_target_plot') as HTMLInputElement).value;
+                  const generateLengthInput = document.getElementById('input_generate_length') as HTMLInputElement;
+                  let val = parseInt(generateLengthInput.value, 10);
+                  if (isNaN(val) || val < 50) val = 50;
+                  if (val > 2000) val = 2000;
+                  onGenerateContinue(targetPlot, val.toString());
+                }}
+                disabled={isStreaming}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm ${
+                  isStreaming ? "bg-gray-200 text-gray-400" : "bg-amber-600 text-white active:bg-amber-700 hover:bg-amber-700"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                AI续写
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => {
-              const targetPlot = (document.getElementById('input_target_plot') as HTMLInputElement).value;
-              const generateLengthInput = document.getElementById('input_generate_length') as HTMLInputElement;
-              let val = parseInt(generateLengthInput.value, 10);
-              if (isNaN(val) || val < 50) val = 50;
-              if (val > 2000) val = 2000;
-              onGenerateContinue(targetPlot, val.toString());
-            }}
-            disabled={isStreaming}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm ${
-              isStreaming ? "bg-gray-200 text-gray-400" : "bg-amber-600 text-white active:bg-amber-700 hover:bg-amber-700"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            AI续写
-          </button>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Selection Precise Micro-Editor Sheet */}
       <AnimatePresence>
