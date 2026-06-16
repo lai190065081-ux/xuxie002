@@ -9,6 +9,7 @@ import { NovelSettings as SettingsType, Chapter, StyleModel, Project, SystemConf
 import NovelSettings from "./components/NovelSettings";
 import NovelEditor from "./components/NovelEditor";
 import { motion, AnimatePresence } from "motion/react";
+import { fetchAIContinueStream } from "./utils/aiClient";
 
 // Current software client version
 const CURRENT_VERSION = "v1.0.0";
@@ -348,23 +349,19 @@ export default function App() {
         }
       }
 
-      const response = await fetch("/api/generate/continue", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          settings,
-          recentText,
-          targetPlot,
-          generateLength,
-          isNewChapter,
-          customApiUrl: systemConfig.apiUrl,
-          customApiKey: systemConfig.apiKey,
-          customModel: systemConfig.apiModel,
-          customSystemPrompt: systemConfig.systemPrompt,
-        }),
-      });
+      const payload = {
+        settings,
+        recentText,
+        targetPlot,
+        generateLength,
+        isNewChapter,
+        customApiUrl: systemConfig.apiUrl,
+        customApiKey: systemConfig.apiKey,
+        customModel: systemConfig.apiModel,
+        customSystemPrompt: systemConfig.systemPrompt,
+      };
+
+      const response = await fetchAIContinueStream(systemConfig, payload);
 
       if (!response.ok) {
         throw new Error("续写流请求失败");
@@ -382,12 +379,15 @@ export default function App() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
+        const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const dataContent = line.slice(6).trim();
+          const cleaned = line.trim();
+          if (!cleaned) continue;
+
+          if (cleaned.startsWith("data:")) {
+            const dataContent = cleaned.slice(5).trim();
 
             if (dataContent === "[DONE]") {
               break;
@@ -400,9 +400,9 @@ export default function App() {
                 break;
               }
 
-              if (parsed.text) {
-                const appendTxt = parsed.text;
-
+              const appendTxt = parsed.text || parsed.choices?.[0]?.delta?.content || "";
+              
+              if (appendTxt) {
                 setChapters((prevList) =>
                   prevList.map((chap) => {
                     if (chap.id === activeChapterId) {

@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Download, Plus, Trash2, FileText, ChevronDown, Check, X, RefreshCw, Sparkles, BookOpen, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { Chapter, NovelSettings, SystemConfig } from "../types";
 import { motion, AnimatePresence } from "motion/react";
+import { fetchAIRewrite } from "../utils/aiClient";
 
 interface NovelEditorProps {
   chapters: Chapter[];
@@ -180,29 +181,20 @@ export default function NovelEditor({
       const beforeContext = text.substring(Math.max(0, startIdx - 300), startIdx);
       const afterContext = text.substring(endIdx, Math.min(text.length, endIdx + 300));
 
-      const response = await fetch("/api/generate/rewrite", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          settings,
-          selectedText,
-          instruction: instructionToUse,
-          parentParagraphsBefore: beforeContext,
-          parentParagraphsAfter: afterContext,
-          customApiUrl: systemConfig?.apiUrl,
-          customApiKey: systemConfig?.apiKey,
-          customModel: systemConfig?.apiModel,
-          customSystemPrompt: systemConfig?.systemPrompt,
-        }),
-      });
+      const payload = {
+        settings,
+        selectedText,
+        instruction: instructionToUse,
+        parentParagraphsBefore: beforeContext,
+        parentParagraphsAfter: afterContext,
+        customApiUrl: systemConfig?.apiUrl,
+        customApiKey: systemConfig?.apiKey,
+        customModel: systemConfig?.apiModel,
+        customSystemPrompt: systemConfig?.systemPrompt,
+      };
 
-      if (!response.ok) {
-        throw new Error("改写微调请求失败");
-      }
-
-      const data = await response.json();
+      const data = await fetchAIRewrite(systemConfig, payload);
+      
       if (data.success && data.rewrittenText) {
         setRewriteResult(data.rewrittenText.trim());
       } else {
