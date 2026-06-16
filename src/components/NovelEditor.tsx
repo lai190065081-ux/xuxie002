@@ -38,6 +38,7 @@ export default function NovelEditor({
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0];
 
@@ -47,7 +48,51 @@ export default function NovelEditor({
     setSelectionRange(null);
     setRewriteResult("");
     setIsChapterDrawerOpen(false);
+
+    // Clear scroll timeout when switching chapters
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    // Restore scroll position
+    const targetScrollTop = activeChapter?.meta?.scrollTop || 0;
+    const timer = setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.scrollTop = targetScrollTop;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
   }, [activeChapterId]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    scrollTimeoutRef.current = setTimeout(() => {
+      onChaptersUpdate(
+        chapters.map((c) =>
+          c.id === activeChapterId
+            ? {
+                ...c,
+                meta: {
+                  ...(c.meta || {}),
+                  scrollTop,
+                },
+              }
+            : c
+        )
+      );
+    }, 100);
+  };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const updatedContent = e.target.value;
@@ -253,6 +298,7 @@ export default function NovelEditor({
           value={activeChapter ? activeChapter.content : ""}
           onChange={handleTextChange}
           onSelect={handleSelectText}
+          onScroll={handleScroll}
           placeholder={
             isStreaming
               ? "小墨正在斟酌局势字词，流式倾吐续写内容中..."

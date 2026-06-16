@@ -35,6 +35,10 @@ export interface Chapter {
   content: string;
   wordCount: number;
   lastUpdated: string;
+  meta?: {
+    scrollTop?: number;
+    [key: string]: any;
+  };
 }
 
 export interface NovelSettings {
@@ -59,5 +63,6 @@ export interface SystemConfig {
   apiModel: string;
   systemPrompt: string;
   theme: "parchment" | "dark";
+  githubRepo?: string;
 }
 

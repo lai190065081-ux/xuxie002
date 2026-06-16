@@ -4,11 +4,33 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { BookOpen, Sparkles, Sliders, PenTool, Wifi, Battery, Signal, ChevronRight, Cpu, Save, Trash2, Library, Plus, Settings as SettingsIcon, Globe, Terminal, Eye, EyeOff } from "lucide-react";
+import { BookOpen, Sparkles, Sliders, PenTool, Wifi, Battery, Signal, ChevronRight, Cpu, Save, Trash2, Library, Plus, Settings as SettingsIcon, Globe, Terminal, Eye, EyeOff, Download, RefreshCw } from "lucide-react";
 import { NovelSettings as SettingsType, Chapter, StyleModel, Project, SystemConfig } from "./types";
 import NovelSettings from "./components/NovelSettings";
 import NovelEditor from "./components/NovelEditor";
 import { motion, AnimatePresence } from "motion/react";
+
+// Current software client version
+const CURRENT_VERSION = "v1.0.0";
+
+// Custom semver validation checker
+function isNewerVersion(current: string, latest: string): boolean {
+  const cleanCurr = current.replace(/^v/i, "").trim();
+  const cleanLate = latest.replace(/^v/i, "").trim();
+
+  if (cleanCurr === cleanLate) return false;
+
+  const currParts = cleanCurr.split(".").map(Number);
+  const lateParts = cleanLate.split(".").map(Number);
+
+  for (let i = 0; i < Math.max(currParts.length, lateParts.length); i++) {
+    const currVal = currParts[i] || 0;
+    const lateVal = lateParts[i] || 0;
+    if (lateVal > currVal) return true;
+    if (lateVal < currVal) return false;
+  }
+  return false;
+}
 
 // Default preset values for easy onboarding
 const DEFAULT_STYLE: StyleModel = {
@@ -111,7 +133,11 @@ export default function App() {
     const saved = localStorage.getItem("xiaomo-system-config");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          githubRepo: parsed.githubRepo || "lai190065081/react-example",
+        };
       } catch {}
     }
     return {
@@ -120,10 +146,17 @@ export default function App() {
       apiModel: "gemini-3.5-flash",
       systemPrompt: "",
       theme: "parchment",
+      githubRepo: "lai190065081/react-example",
     };
   });
 
   const [showApiKey, setShowApiKey] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    tagName: string;
+    title: string;
+    body: string;
+    downloadUrl: string;
+  } | null>(null);
 
   // Persist system configuration changes
   useEffect(() => {
@@ -245,6 +278,51 @@ export default function App() {
     const clockTimer = setInterval(updateClock, 30000);
     return () => clearInterval(clockTimer);
   }, []);
+
+  // Automatic version update checking from GitHub Releases
+  useEffect(() => {
+    let active = true;
+    const checkUpdates = async () => {
+      const repo = systemConfig.githubRepo || "lai190065081/react-example";
+      try {
+        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!active) return;
+
+        if (data && data.tag_name) {
+          const latestTag = data.tag_name;
+          if (isNewerVersion(CURRENT_VERSION, latestTag)) {
+            // Locate direct .apk download url from assets
+            let apkUrl = "";
+            if (data.assets && Array.isArray(data.assets)) {
+              const apkAsset = data.assets.find((asset: any) => asset.name?.toLowerCase().endsWith(".apk"));
+              if (apkAsset) {
+                apkUrl = apkAsset.browser_download_url;
+              }
+            }
+            if (!apkUrl) {
+              apkUrl = data.html_url || `https://github.com/${repo}/releases/latest`;
+            }
+
+            setUpdateInfo({
+              tagName: latestTag,
+              title: data.name || latestTag,
+              body: data.body || "当前版本无具体的描述日志。",
+              downloadUrl: apkUrl,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("自动检测 GitHub Releases 更新失败:", err);
+      }
+    };
+
+    checkUpdates();
+    return () => {
+      active = false;
+    };
+  }, [systemConfig.githubRepo]);
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0];
 
@@ -741,6 +819,41 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Section 4: GitHub Update Config */}
+                <div className="bg-theme-card rounded-2xl border border-theme/20 p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center gap-1.5 pb-1 border-b border-theme/10">
+                    <RefreshCw className="w-4 h-4 text-amber-600" />
+                    <h4 className="text-xs font-extrabold text-theme-primary">应用更新与版本检测 (Client Update)</h4>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-theme-secondary block mb-1">
+                        GitHub 仓库配置 (Owner/Repo)：
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="例如：lai190065081/react-example"
+                        value={systemConfig.githubRepo || ""}
+                        onChange={(e) => setSystemConfig(prev => ({ ...prev, githubRepo: e.target.value }))}
+                        className="w-full text-xs px-3 py-2 border border-theme/20 rounded-lg bg-theme-input-pure focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-theme-primary"
+                      />
+                      <span className="text-[9px] text-theme-secondary mt-1 block leading-normal">
+                        自动向指定的 GitHub 仓库检测最新发布的 Release，并提供直连的 APK 打包文件下载。
+                      </span>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between border-t border-theme/10">
+                      <span className="text-[11px] text-theme-secondary font-bold">
+                        当前应用本地版本：
+                      </span>
+                      <span className="text-xs font-mono font-bold text-amber-600 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20">
+                        {CURRENT_VERSION}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -837,6 +950,86 @@ export default function App() {
           </span>
         </button>
       </nav>
+
+      {/* GitHub Releases New Version Update Modal Backdrop & Card */}
+      <AnimatePresence>
+        {updateInfo && (
+          <div className="fixed inset-0 flex items-center justify-center p-4 z-50 overflow-hidden">
+            {/* Backdrop Mask */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setUpdateInfo(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+            />
+            
+            {/* Modal Card content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
+              className="relative w-full max-w-sm rounded-2xl border border-theme/20 shadow-2xl p-5 bg-theme-app text-theme-primary overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="flex items-center gap-2.5 pb-2 border-b border-theme/15 shrink-0">
+                <div className="w-9 h-9 rounded-full bg-amber-600/10 flex items-center justify-center text-amber-600 shrink-0">
+                  <RefreshCw className="w-5 h-5 animate-spin" style={{ animationDuration: '4s' }} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-theme-primary leading-tight">发现更佳版本</h3>
+                  <p className="text-[10px] text-theme-secondary font-medium mt-0.5">
+                    最新版本已由 GitHub Actions 打包发布
+                  </p>
+                </div>
+              </div>
+
+              {/* Version & log details */}
+              <div className="mt-4 flex-1 overflow-y-auto space-y-3 min-w-0 pr-1 select-text scroll-smooth" id="release_changelog_body">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-theme-secondary">最新线上版本:</span>
+                    <span className="text-[10px] font-mono font-black text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                      {updateInfo.tagName}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-theme-muted font-semibold">
+                    当前: {CURRENT_VERSION}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <h4 className="text-[11px] font-extrabold text-theme-secondary mb-1">《新版更新日志》：</h4>
+                  <div className="text-xs p-3 rounded-xl border border-theme/12 bg-theme-card leading-relaxed text-theme-secondary whitespace-pre-wrap max-h-[160px] overflow-y-auto font-sans break-all">
+                    {updateInfo.body}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="mt-5 pt-3.5 border-t border-theme/15 flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setUpdateInfo(null)}
+                  className="flex-1 py-2 px-3 border border-theme/20 rounded-xl text-xs font-bold text-theme-secondary bg-theme-card active:scale-95 transition-all outline-none cursor-pointer hover:text-theme-primary hover:bg-theme-active"
+                >
+                  稍后再说
+                </button>
+                <a
+                  href={updateInfo.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setUpdateInfo(null)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black text-white bg-amber-600 shadow-sm active:scale-95 hover:bg-amber-700 transition-all outline-none cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  立即下载
+                </a>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
