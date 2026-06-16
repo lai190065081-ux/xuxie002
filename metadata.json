@@ -1,0 +1,6 @@
+{
+  "name": "小说续写软件",
+  "description": "一款智能小说续写与协同创作软件。支持上传TXT小说学习专属写作风格、自定义人物与故事背景设定、AI自动续写对话与情节，并智能生成三种剧本发展分支，帮助创作者轻松开拓灵感和拓展章节。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # 2. 设置 Node.js 环境并安装 Web 端依赖
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies & Build Web Project
+        run: |
+          npm install
+          npm run build
+
+      # 3. 设置 Java 环境（Capacitor 安卓打包必需）
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 4. 设置 Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 5. 同步 Capacitor 代码到安卓原生工程
+      - name: Capacitor Sync
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
+      # 6. 赋予 Gradle 执行权限并编译 Debug APK
+      - name: Build APK with Gradle
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      # 7. 将生成的 APK 收集并上传到 GitHub Action 产物中
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: novel-writer-app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
